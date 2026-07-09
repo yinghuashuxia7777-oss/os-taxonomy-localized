@@ -469,8 +469,8 @@ function installGraphPointerFallback() {
   if (state.graphPointerFallbackInstalled) {
     return;
   }
-  els.graph.addEventListener("pointerdown", handleGraphPointerDown);
-  els.graph.addEventListener("pointerup", handleGraphPointerUp);
+  els.graph.addEventListener("pointerdown", handleGraphPointerDown, true);
+  els.graph.addEventListener("pointerup", handleGraphPointerUp, true);
   state.graphPointerFallbackInstalled = true;
 }
 
@@ -489,7 +489,9 @@ function handleGraphPointerUp(event) {
   if (drift > POINTER_CLICK_MAX_DRIFT) {
     return;
   }
-  selectNearestNodeFromPointerEvent(event, { focusCamera: true });
+  if (selectNearestNodeFromPointerEvent(event, { focusCamera: true })) {
+    event.stopPropagation();
+  }
 }
 
 function selectNearestNodeFromPointerEvent(event, options = {}) {
