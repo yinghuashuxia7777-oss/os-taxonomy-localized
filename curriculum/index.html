@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marble Curriculum Graph</title>
+    <meta
+      name="description"
+      content="A localized 3D graph of primary and elementary curriculum topics and prerequisite relationships."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="graph-stage" aria-label="Curriculum graph">
+        <div class="topbar">
+          <div class="brand-block">
+            <p class="eyebrow" data-i18n="eyebrow">Open curriculum taxonomy</p>
+            <h1 data-i18n="title">Marble Skill Taxonomy</h1>
+            <p class="dek" data-i18n="subtitle">
+              1,590 micro-topics connected by 3,221 prerequisite relationships across the primary years.
+            </p>
+          </div>
+
+          <div class="toolbar" aria-label="Controls">
+            <label class="select-wrap">
+              <span data-i18n="language">Language</span>
+              <select id="languageSelect" aria-label="Language">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="th">ไทย</option>
+              </select>
+            </label>
+            <a class="source-link" href="https://github.com/withmarble/os-taxonomy" rel="noreferrer" target="_blank">
+              GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="subject-strip" id="subjectStrip" aria-label="Subjects"></div>
+
+        <div class="stats-bar" aria-live="polite">
+          <div>
+            <strong id="topicCount">0</strong>
+            <span data-i18n="concepts">concepts</span>
+          </div>
+          <div>
+            <strong id="edgeCount">0</strong>
+            <span data-i18n="links">prerequisite links</span>
+          </div>
+          <div>
+            <strong id="visibleCount">0</strong>
+            <span data-i18n="visible">visible</span>
+          </div>
+        </div>
+
+        <div id="graph" class="graph-canvas" role="img" aria-label="Interactive curriculum graph"></div>
+        <canvas id="fallbackGraph" class="fallback-graph" width="1200" height="800"></canvas>
+
+        <div class="status-layer" id="statusLayer">
+          <div class="status-card">
+            <p id="statusTitle" data-i18n="loadingTitle">Loading curriculum graph</p>
+            <span id="statusText" data-i18n="loadingText">Preparing concepts and prerequisite links...</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="details-panel" id="detailsPanel" aria-live="polite">
+        <div class="panel-empty" id="emptyState">
+          <p data-i18n="emptyTitle">Select a concept</p>
+          <span data-i18n="emptyText">Its prerequisites and unlocked concepts will appear here.</span>
+        </div>
+
+        <article class="topic-detail" id="topicDetail" hidden>
+          <div class="detail-header">
+            <p class="subject-pill" id="detailSubject">Subject</p>
+            <button class="close-button" id="closeDetail" type="button" aria-label="Close">×</button>
+          </div>
+          <h2 id="detailTitle"></h2>
+          <p class="detail-meta" id="detailMeta"></p>
+          <p class="detail-description" id="detailDescription"></p>
+
+          <section class="detail-section">
+            <h3 data-i18n="evidence">Mastery evidence</h3>
+            <ul id="detailEvidence"></ul>
+          </section>
+
+          <section class="detail-section">
+            <h3 data-i18n="assessment">Assessment prompt</h3>
+            <p id="detailAssessment" class="assessment-copy"></p>
+          </section>
+
+          <section class="detail-section relations">
+            <div>
+              <h3 data-i18n="prerequisites">Prerequisites</h3>
+              <ul id="prerequisiteList"></ul>
+            </div>
+            <div>
+              <h3 data-i18n="unlocks">Unlocks</h3>
+              <ul id="unlockList"></ul>
+            </div>
+          </section>
+        </article>
+      </aside>
+    </main>
+
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/3d-force-graph@1.73.5/dist/3d-force-graph.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
