@@ -108,6 +108,8 @@ const SUBJECT_COLORS = {
   Science: "#62e6c8",
 };
 
+const NEARBY_NODE_PICK_RADIUS = 28;
+
 const state = {
   language: "en",
   subject: "all",
@@ -125,6 +127,7 @@ const state = {
   highlightedNodes: new Set(),
   highlightedLinks: new Set(),
   selectedNode: null,
+  hoveredNode: null,
 };
 
 const els = {
@@ -315,6 +318,7 @@ function renderGraph() {
       .nodeId("id")
       .nodeLabel((node) => `${escapeHtml(node.label)}<br>${escapeHtml(subjectLabel(node.canonicalSubject))} · ${escapeHtml(t("age"))} ${node.age}`)
       .nodeVal((node) => node.val)
+      .nodeRelSize(4.2)
       .nodeResolution(18)
       .nodeOpacity(0.94)
       .nodeColor(nodeColor)
@@ -324,8 +328,9 @@ function renderGraph() {
       .linkDirectionalParticles((link) => (state.highlightedLinks.has(link) ? 4 : 0))
       .linkDirectionalParticleWidth(1.35)
       .linkDirectionalParticleSpeed(0.006)
+      .onNodeHover(handleNodeHover)
       .onNodeClick(selectNode)
-      .onBackgroundClick(clearSelection)
+      .onBackgroundClick(handleBackgroundClick)
       .enableNodeDrag(true)
       .cooldownTicks(140);
 
@@ -409,7 +414,7 @@ function linkColor(link) {
   return link.strength === "hard" ? "rgba(210, 225, 255, 0.24)" : "rgba(139, 231, 255, 0.14)";
 }
 
-function selectNode(node) {
+function selectNode(node, options = {}) {
   state.selectedNode = node;
   state.highlightedNodes = new Set([node.id]);
   state.highlightedLinks = new Set();
@@ -421,10 +426,64 @@ function selectNode(node) {
   renderDetail(node);
   if (state.graph) {
     state.graph.nodeColor(nodeColor).linkColor(linkColor).linkWidth((link) => (state.highlightedLinks.has(link) ? 2.2 : link.strength === "hard" ? 0.7 : 0.35));
+    if (options.focusCamera === false) {
+      return;
+    }
     const distance = 78;
     const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
     state.graph.cameraPosition({ x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio }, node, 900);
   }
+}
+
+function handleNodeHover(node) {
+  state.hoveredNode = node || null;
+  els.graph.style.cursor = node ? "pointer" : "grab";
+  if (node && (!state.selectedNode || state.selectedNode.id !== node.id)) {
+    selectNode(node, { focusCamera: false });
+  }
+}
+
+function handleBackgroundClick(event) {
+  if (state.hoveredNode) {
+    selectNode(state.hoveredNode);
+    return;
+  }
+  const nearbyNode = nearestNodeFromPointerEvent(event);
+  if (nearbyNode) {
+    selectNode(nearbyNode);
+    return;
+  }
+  clearSelection();
+}
+
+function nearestNodeFromPointerEvent(event) {
+  if (!event || !state.graph || !window.THREE || typeof state.graph.camera !== "function") {
+    return null;
+  }
+  const clientX = event.clientX;
+  const clientY = event.clientY;
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  const camera = state.graph.camera();
+  const rect = els.graph.getBoundingClientRect();
+  let nearest = null;
+  let nearestDistance = NEARBY_NODE_PICK_RADIUS;
+  visibleNodes().forEach((node) => {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) {
+      return;
+    }
+    const point = new THREE.Vector3(node.x, node.y, node.z).project(camera);
+    const screenX = rect.left + ((point.x + 1) / 2) * rect.width;
+    const screenY = rect.top + ((1 - point.y) / 2) * rect.height;
+    const distance = Math.hypot(screenX - clientX, screenY - clientY);
+    if (distance < nearestDistance) {
+      nearest = node;
+      nearestDistance = distance;
+    }
+  });
+  return nearest;
 }
 
 function clearSelection() {
