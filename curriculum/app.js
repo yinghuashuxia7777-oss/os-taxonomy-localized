@@ -457,6 +457,9 @@ function handleBackgroundClick(event) {
     selectNode(state.hoveredNode);
     return;
   }
+  if (selectTooltipNode({ focusCamera: true })) {
+    return;
+  }
   const nearbyNode = nearestNodeFromPointerEvent(event);
   if (nearbyNode) {
     selectNode(nearbyNode);
@@ -489,6 +492,10 @@ function handleGraphPointerUp(event) {
   if (drift > POINTER_CLICK_MAX_DRIFT) {
     return;
   }
+  if (selectTooltipNode({ focusCamera: true })) {
+    event.stopPropagation();
+    return;
+  }
   if (selectNearestNodeFromPointerEvent(event, { focusCamera: true })) {
     event.stopPropagation();
   }
@@ -502,6 +509,24 @@ function selectNearestNodeFromPointerEvent(event, options = {}) {
   rememberPointerFallbackSelection(event, node);
   selectNode(node, options);
   return true;
+}
+
+function selectTooltipNode(options = {}) {
+  const node = nodeFromVisibleTooltip();
+  if (!node) {
+    return false;
+  }
+  selectNode(node, options);
+  return true;
+}
+
+function nodeFromVisibleTooltip() {
+  const tooltip = document.querySelector(".scene-tooltip") || document.querySelector("[class*='tooltip']");
+  const text = tooltip ? tooltip.textContent.trim() : "";
+  if (!text) {
+    return null;
+  }
+  return visibleNodes().find((node) => text.includes(node.label)) || null;
 }
 
 function rememberPointerFallbackSelection(event, node) {
