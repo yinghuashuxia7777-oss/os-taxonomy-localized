@@ -108,7 +108,9 @@ const SUBJECT_COLORS = {
   Science: "#62e6c8",
 };
 
-const NEARBY_NODE_PICK_RADIUS = 28;
+const NEARBY_NODE_PICK_RADIUS = 48;
+const POINTER_CLICK_MAX_DRIFT = 10;
+const POINTER_FALLBACK_CLEAR_MS = 300;
 
 const state = {
   language: "en",
@@ -128,6 +130,9 @@ const state = {
   highlightedLinks: new Set(),
   selectedNode: null,
   hoveredNode: null,
+  graphPointerFallbackInstalled: false,
+  pointerDown: null,
+  recentPointerFallback: null,
 };
 
 const els = {
@@ -342,6 +347,7 @@ function renderGraph() {
     state.graph.d3Force("link").distance((link) => (link.strength === "hard" ? 42 : 64));
     window.addEventListener("resize", resizeGraph);
     resizeGraph();
+    installGraphPointerFallback();
   }
 
   state.graph.graphData(graphData);
@@ -444,6 +450,9 @@ function handleNodeHover(node) {
 }
 
 function handleBackgroundClick(event) {
+  if (isRecentPointerFallbackSelection(event)) {
+    return;
+  }
   if (state.hoveredNode) {
     selectNode(state.hoveredNode);
     return;
@@ -456,13 +465,85 @@ function handleBackgroundClick(event) {
   clearSelection();
 }
 
-function nearestNodeFromPointerEvent(event) {
-  if (!event || !state.graph || !window.THREE || typeof state.graph.camera !== "function") {
+function installGraphPointerFallback() {
+  if (state.graphPointerFallbackInstalled) {
+    return;
+  }
+  els.graph.addEventListener("pointerdown", handleGraphPointerDown);
+  els.graph.addEventListener("pointerup", handleGraphPointerUp);
+  state.graphPointerFallbackInstalled = true;
+}
+
+function handleGraphPointerDown(event) {
+  state.pointerDown = pointerPoint(event);
+}
+
+function handleGraphPointerUp(event) {
+  const pointerUp = pointerPoint(event);
+  if (!state.pointerDown || !pointerUp) {
+    state.pointerDown = null;
+    return;
+  }
+  const drift = Math.hypot(pointerUp.clientX - state.pointerDown.clientX, pointerUp.clientY - state.pointerDown.clientY);
+  state.pointerDown = null;
+  if (drift > POINTER_CLICK_MAX_DRIFT) {
+    return;
+  }
+  selectNearestNodeFromPointerEvent(event, { focusCamera: true });
+}
+
+function selectNearestNodeFromPointerEvent(event, options = {}) {
+  const node = nearestNodeFromPointerEvent(event);
+  if (!node) {
+    return false;
+  }
+  rememberPointerFallbackSelection(event, node);
+  selectNode(node, options);
+  return true;
+}
+
+function rememberPointerFallbackSelection(event, node) {
+  const point = pointerPoint(event);
+  if (!point) {
+    return;
+  }
+  state.recentPointerFallback = {
+    nodeId: node.id,
+    clientX: point.clientX,
+    clientY: point.clientY,
+    at: Date.now(),
+  };
+}
+
+function isRecentPointerFallbackSelection(event) {
+  const point = pointerPoint(event);
+  const recent = state.recentPointerFallback;
+  if (!point || !recent) {
+    return false;
+  }
+  const age = Date.now() - recent.at;
+  const drift = Math.hypot(point.clientX - recent.clientX, point.clientY - recent.clientY);
+  return age >= 0 && age < POINTER_FALLBACK_CLEAR_MS && drift <= POINTER_CLICK_MAX_DRIFT;
+}
+
+function pointerPoint(event) {
+  if (!event) {
     return null;
   }
   const clientX = event.clientX;
   const clientY = event.clientY;
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+  return { clientX, clientY };
+}
+
+function nearestNodeFromPointerEvent(event) {
+  if (!event || !state.graph || !window.THREE || typeof state.graph.camera !== "function") {
+    return null;
+  }
+  const eventPoint = pointerPoint(event);
+  if (!eventPoint) {
     return null;
   }
 
@@ -474,10 +555,10 @@ function nearestNodeFromPointerEvent(event) {
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) {
       return;
     }
-    const point = new THREE.Vector3(node.x, node.y, node.z).project(camera);
-    const screenX = rect.left + ((point.x + 1) / 2) * rect.width;
-    const screenY = rect.top + ((1 - point.y) / 2) * rect.height;
-    const distance = Math.hypot(screenX - clientX, screenY - clientY);
+    const projected = new THREE.Vector3(node.x, node.y, node.z).project(camera);
+    const screenX = rect.left + ((projected.x + 1) / 2) * rect.width;
+    const screenY = rect.top + ((1 - projected.y) / 2) * rect.height;
+    const distance = Math.hypot(screenX - eventPoint.clientX, screenY - eventPoint.clientY);
     if (distance < nearestDistance) {
       nearest = node;
       nearestDistance = distance;
