@@ -1,0 +1,22 @@
+{
+  "id": "./",
+  "name": "Marble Learning Paths",
+  "short_name": "Marble Skills",
+  "description": "Age-based learning paths across the Marble curriculum knowledge graph.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#050a13",
+  "theme_color": "#050a13",
+  "orientation": "any",
+  "categories": ["education", "reference"],
+  "icons": [
+    {
+      "src": "./app-icon.png?v=20260710-ios-icon-v6",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
