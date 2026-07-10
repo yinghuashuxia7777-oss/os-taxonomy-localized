@@ -301,6 +301,10 @@ select {
   backdrop-filter: blur(18px);
 }
 
+.details-panel [hidden] {
+  display: none !important;
+}
+
 .panel-empty,
 .topic-detail {
   padding: 28px;
