@@ -1,12 +1,36 @@
+import {
+  buildAgeOutline,
+  buildGraphFocus,
+  getAvailableAges,
+  rankNextSteps,
+  topicStageAtAge,
+} from "./outline-model.js?v=20260710-agepaths-final";
+
 const LANG = {
   en: {
     eyebrow: "Open curriculum taxonomy",
     title: "Marble Skill Taxonomy",
     subtitle: "1,590 micro-topics connected by 3,221 prerequisite relationships across the primary years.",
+    outlineEyebrow: "Age guide",
+    outlineTitle: "Learning path",
+    outlineButton: "Learning path",
+    closeOutline: "Close learning path",
+    chooseAge: "Choose age",
+    focusLearning: "Focus learning",
+    reinforceLearning: "Continue practising",
+    extensionLearning: "Consolidation & extension",
+    learningGoal: "Learning goal",
+    masterySignal: "How to tell",
+    recommendedNext: "Recommended next",
+    furtherExtensions: "Further extensions",
+    backToPrevious: "Back to previous concept",
+    noTopics: "No topics in this section.",
+    prerequisiteContext: "Earlier prerequisite",
+    nextContext: "Next stage",
     language: "Language",
     concepts: "concepts",
     links: "prerequisite links",
-    visible: "visible",
+    visible: "in focus",
     loadingTitle: "Loading curriculum graph",
     loadingText: "Preparing concepts and prerequisite links...",
     emptyTitle: "Select a concept",
@@ -35,10 +59,26 @@ const LANG = {
     eyebrow: "开放课程知识图谱",
     title: "Marble 技能分类体系",
     subtitle: "1,590 个微主题，通过 3,221 条先修关系连接小学阶段学习内容。",
+    outlineEyebrow: "年龄学习指南",
+    outlineTitle: "学习路径",
+    outlineButton: "学习路径",
+    closeOutline: "关闭学习路径",
+    chooseAge: "选择年龄",
+    focusLearning: "重点学习",
+    reinforceLearning: "继续巩固",
+    extensionLearning: "巩固与延伸",
+    learningGoal: "学习目标",
+    masterySignal: "掌握判断",
+    recommendedNext: "建议优先学习",
+    furtherExtensions: "后续可延伸",
+    backToPrevious: "返回上一个知识点",
+    noTopics: "本部分暂无知识点。",
+    prerequisiteContext: "较早的先修知识",
+    nextContext: "下一阶段",
     language: "语言",
     concepts: "概念",
     links: "先修链接",
-    visible: "可见",
+    visible: "本阶段",
     loadingTitle: "正在加载课程图谱",
     loadingText: "正在准备概念与先修关系...",
     emptyTitle: "选择一个概念",
@@ -67,10 +107,26 @@ const LANG = {
     eyebrow: "แผนผังหลักสูตรแบบเปิด",
     title: "อนุกรมวิธานทักษะ Marble",
     subtitle: "ไมโครหัวข้อ 1,590 รายการ เชื่อมด้วยความสัมพันธ์ความรู้พื้นฐาน 3,221 เส้นตลอดช่วงประถมศึกษา",
+    outlineEyebrow: "คู่มือการเรียนรู้ตามวัย",
+    outlineTitle: "เส้นทางการเรียนรู้",
+    outlineButton: "เส้นทางการเรียนรู้",
+    closeOutline: "ปิดเส้นทางการเรียนรู้",
+    chooseAge: "เลือกอายุ",
+    focusLearning: "เนื้อหาหลักที่ควรเรียน",
+    reinforceLearning: "ทบทวนและฝึกต่อ",
+    extensionLearning: "ทบทวนและต่อยอด",
+    learningGoal: "เป้าหมายการเรียนรู้",
+    masterySignal: "เกณฑ์สังเกตความเข้าใจ",
+    recommendedNext: "แนะนำให้เรียนต่อ",
+    furtherExtensions: "หัวข้อต่อยอด",
+    backToPrevious: "กลับไปแนวคิดก่อนหน้า",
+    noTopics: "ไม่มีหัวข้อในส่วนนี้",
+    prerequisiteContext: "พื้นฐานก่อนหน้า",
+    nextContext: "ขั้นถัดไป",
     language: "ภาษา",
     concepts: "แนวคิด",
     links: "ลิงก์ความรู้พื้นฐาน",
-    visible: "ที่แสดง",
+    visible: "ในช่วงนี้",
     loadingTitle: "กำลังโหลดแผนผังหลักสูตร",
     loadingText: "กำลังเตรียมแนวคิดและความสัมพันธ์ความรู้พื้นฐาน...",
     emptyTitle: "เลือกแนวคิด",
@@ -114,7 +170,15 @@ const POINTER_FALLBACK_CLEAR_MS = 300;
 
 const state = {
   language: "en",
+  age: 4,
   subject: "all",
+  domain: "all",
+  availableAges: [],
+  graphFocus: null,
+  outlineOpen: !window.matchMedia("(max-width: 1360px)").matches,
+  expandedSubjects: new Set(),
+  expandedDomains: new Set(),
+  selectionHistory: [],
   graph: null,
   englishTopics: null,
   englishDependencies: null,
@@ -133,9 +197,18 @@ const state = {
   graphPointerFallbackInstalled: false,
   pointerDown: null,
   recentPointerFallback: null,
+  languageLoadVersion: 0,
 };
 
 const els = {
+  appShell: document.getElementById("appShell"),
+  outlinePanel: document.getElementById("outlinePanel"),
+  outlineToggle: document.getElementById("outlineToggle"),
+  outlineClose: document.getElementById("outlineClose"),
+  ageSelector: document.getElementById("ageSelector"),
+  outlineAgeTitle: document.getElementById("outlineAgeTitle"),
+  outlineAgeSummary: document.getElementById("outlineAgeSummary"),
+  outlineTree: document.getElementById("outlineTree"),
   graph: document.getElementById("graph"),
   fallbackGraph: document.getElementById("fallbackGraph"),
   subjectStrip: document.getElementById("subjectStrip"),
@@ -157,6 +230,7 @@ const els = {
   detailAssessment: document.getElementById("detailAssessment"),
   prerequisiteList: document.getElementById("prerequisiteList"),
   unlockList: document.getElementById("unlockList"),
+  extensionList: document.getElementById("extensionList"),
 };
 
 function t(key) {
@@ -173,6 +247,11 @@ function localizeStaticText() {
     node.textContent = t(node.dataset.i18n);
   });
   els.languageSelect.setAttribute("aria-label", t("language"));
+  els.outlineToggle.setAttribute("aria-label", t("outlineButton"));
+  els.outlineClose.setAttribute("aria-label", t("closeOutline"));
+  els.outlineClose.title = t("closeOutline");
+  els.ageSelector.setAttribute("aria-label", t("chooseAge"));
+  els.outlineTree.setAttribute("aria-label", t("outlineTitle"));
 }
 
 async function fetchJson(path) {
@@ -189,32 +268,51 @@ function dataPath(kind, language) {
 }
 
 async function loadLanguage(language) {
+  const loadVersion = ++state.languageLoadVersion;
   state.language = language;
   localizeStaticText();
   showStatus(t("loadingTitle"), t("loadingText"));
 
+  let englishTopics = state.englishTopics;
+  let englishDependencies = state.englishDependencies;
   if (!state.englishTopics || !state.englishDependencies) {
-    [state.englishTopics, state.englishDependencies] = await Promise.all([
+    [englishTopics, englishDependencies] = await Promise.all([
       fetchJson(dataPath("topics", "en")),
       fetchJson(dataPath("dependencies", "en")),
     ]);
   }
+  if (loadVersion !== state.languageLoadVersion) return false;
+  state.englishTopics = englishTopics;
+  state.englishDependencies = englishDependencies;
 
+  let localizedTopics;
+  let localizedDependencies;
   if (language === "en") {
-    state.localizedTopics = state.englishTopics;
-    state.localizedDependencies = state.englishDependencies;
+    localizedTopics = state.englishTopics;
+    localizedDependencies = state.englishDependencies;
   } else {
-    [state.localizedTopics, state.localizedDependencies] = await Promise.all([
+    [localizedTopics, localizedDependencies] = await Promise.all([
       fetchJson(dataPath("topics", language)),
       fetchJson(dataPath("dependencies", language)),
     ]);
   }
+  if (loadVersion !== state.languageLoadVersion) return false;
+  state.localizedTopics = localizedTopics;
+  state.localizedDependencies = localizedDependencies;
 
   buildGraphData();
+  state.availableAges = getAvailableAges(state.nodes);
+  if (!state.availableAges.includes(state.age)) {
+    state.age = state.availableAges[0] || 4;
+  }
+  renderAgeNavigator();
   renderSubjectFilters();
-  updateStats();
+  renderOutline();
   renderGraph();
+  updateStats();
+  setOutlineOpen(state.outlineOpen);
   hideStatus();
+  return true;
 }
 
 function buildGraphData() {
@@ -235,6 +333,8 @@ function buildGraphData() {
       localized,
       canonical,
       label: localized.name || canonical.name,
+      ageRangeStart: canonical.ageRangeStart,
+      ageRangeEnd: canonical.ageRangeEnd,
       val: Math.max(1.8, 2 + (canonical.centrality || 0) * 28),
       age: `${canonical.ageRangeStart}-${canonical.ageRangeEnd}`,
     };
@@ -264,12 +364,53 @@ function pushRelation(map, id, link) {
   map.get(id).push(link);
 }
 
+function ageLabel(age) {
+  if (state.language === "zh") return `${age}岁`;
+  if (state.language === "th") return `อายุ ${age} ปี`;
+  return `Age ${age}`;
+}
+
+function renderAgeNavigator() {
+  els.ageSelector.innerHTML = state.availableAges
+    .map(
+      (age) => `
+        <button
+          class="age-button ${age === state.age ? "is-active" : ""} ${age >= 14 ? "is-extension" : ""}"
+          type="button"
+          data-age="${age}"
+          aria-label="${escapeHtml(ageLabel(age))}"
+          aria-pressed="${age === state.age}"
+        >${age}</button>
+      `,
+    )
+    .join("");
+  els.ageSelector.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => selectAge(Number(button.dataset.age)));
+  });
+}
+
+function selectAge(age) {
+  if (!state.availableAges.includes(age)) return;
+  state.age = age;
+  state.subject = "all";
+  state.domain = "all";
+  state.expandedSubjects.clear();
+  state.expandedDomains.clear();
+  clearSelection({ renderOutline: false });
+  renderAgeNavigator();
+  renderSubjectFilters();
+  renderOutline();
+  renderGraph();
+  updateStats();
+}
+
 function renderSubjectFilters() {
+  const activeNodes = state.nodes.filter((node) => topicStageAtAge(node, state.age));
   const subjects = [...new Set(state.englishTopics.topics.map((topic) => topic.subject))].sort();
   const buttons = [
-    chipMarkup("all", t("allSubjects"), state.subject === "all", "#d7e3ff", state.englishTopics.topics.length),
+    chipMarkup("all", t("allSubjects"), state.subject === "all", "#d7e3ff", activeNodes.length),
     ...subjects.map((subject) => {
-      const count = state.englishTopics.topics.filter((topic) => topic.subject === subject).length;
+      const count = activeNodes.filter((node) => node.canonicalSubject === subject).length;
       return chipMarkup(subject, subjectLabel(subject), state.subject === subject, SUBJECT_COLORS[subject], count);
     }),
   ];
@@ -277,7 +418,14 @@ function renderSubjectFilters() {
   els.subjectStrip.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {
       state.subject = button.dataset.subject;
+      state.domain = "all";
+      if (state.subject !== "all") {
+        state.expandedSubjects.add(`focus|${state.subject}`);
+        state.expandedSubjects.add(`reinforce|${state.subject}`);
+      }
+      clearSelection({ renderOutline: false });
       renderSubjectFilters();
+      renderOutline();
       renderGraph();
       updateStats();
     });
@@ -294,21 +442,240 @@ function chipMarkup(subject, label, active, color, count) {
   `;
 }
 
-function visibleNodes() {
-  if (state.subject === "all") {
-    return state.nodes;
+function totalOutlineTopics(groups) {
+  return groups.reduce((total, subject) => total + subject.count, 0);
+}
+
+function ageSummaryText(outline) {
+  const focusCount = totalOutlineTopics(outline.focus);
+  const reinforceCount = totalOutlineTopics(outline.reinforce);
+  if (state.age >= 14) {
+    if (state.language === "zh") return `${reinforceCount} 个知识点 · ${t("extensionLearning")}`;
+    if (state.language === "th") return `${reinforceCount} หัวข้อ · ${t("extensionLearning")}`;
+    return `${reinforceCount} topics · ${t("extensionLearning")}`;
   }
-  return state.nodes.filter((node) => node.canonicalSubject === state.subject);
+  if (state.language === "zh") return `${focusCount} 个重点学习 · ${reinforceCount} 个继续巩固`;
+  if (state.language === "th") return `${focusCount} หัวข้อหลัก · ${reinforceCount} หัวข้อทบทวน`;
+  return `${focusCount} focus · ${reinforceCount} continuing`;
+}
+
+function renderOutline() {
+  if (!state.nodes.length) return;
+  const outline = buildAgeOutline(state.nodes, state.age);
+  els.outlineAgeTitle.textContent = ageLabel(state.age);
+  els.outlineAgeSummary.textContent = ageSummaryText(outline);
+
+  const sections = state.age >= 14
+    ? [{ key: "reinforce", label: t("extensionLearning"), groups: outline.reinforce }]
+    : [
+        { key: "focus", label: t("focusLearning"), groups: outline.focus },
+        { key: "reinforce", label: t("reinforceLearning"), groups: outline.reinforce },
+      ];
+  els.outlineTree.innerHTML = sections.map(outlineSectionMarkup).join("");
+  bindOutlineEvents();
+  scrollSelectedOutlineIntoView();
+}
+
+function outlineSectionMarkup(section) {
+  const count = totalOutlineTopics(section.groups);
+  const content = section.groups.length
+    ? section.groups.map((subject) => outlineSubjectMarkup(section.key, subject)).join("")
+    : `<p class="outline-empty">${escapeHtml(t("noTopics"))}</p>`;
+  return `
+    <section class="outline-section ${section.key === "reinforce" ? "is-reinforce" : ""}">
+      <h3 class="outline-section-heading">
+        <span>${escapeHtml(section.label)}</span>
+        <span class="outline-count">${formatNumber(count)}</span>
+      </h3>
+      ${content}
+    </section>
+  `;
+}
+
+function outlineSubjectMarkup(stage, subject) {
+  const subjectKey = `${stage}|${subject.key}`;
+  const selectedInSubject = state.selectedNode?.canonicalSubject === subject.key && topicStageAtAge(state.selectedNode, state.age) === stage;
+  const open = state.expandedSubjects.has(subjectKey) || selectedInSubject;
+  return `
+    <div class="outline-branch" style="--subject-color: ${SUBJECT_COLORS[subject.key] || "#8be7ff"}">
+      <button
+        class="outline-branch-button"
+        type="button"
+        data-outline-subject="${escapeHtml(subject.key)}"
+        data-outline-stage="${stage}"
+        aria-expanded="${open}"
+      >
+        <span class="outline-disclosure">›</span>
+        <span class="outline-branch-label"><span class="outline-subject-dot"></span>${escapeHtml(subjectLabel(subject.key))}</span>
+        <span class="outline-count">${formatNumber(subject.count)}</span>
+      </button>
+      <div class="outline-children" ${open ? "" : "hidden"}>
+        ${subject.domains.map((domain) => outlineDomainMarkup(stage, subject.key, domain)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function outlineDomainMarkup(stage, subject, domain) {
+  const domainStateKey = `${stage}|${subject}|${domain.key}`;
+  const selectedInDomain = state.selectedNode?.canonicalSubject === subject
+    && state.selectedNode?.canonicalDomain === domain.key
+    && topicStageAtAge(state.selectedNode, state.age) === stage;
+  const open = state.expandedDomains.has(domainStateKey) || selectedInDomain;
+  const localizedDomain = domain.topics[0]?.localized?.domain || domain.key;
+  return `
+    <div class="outline-domain">
+      <button
+        class="outline-domain-button"
+        type="button"
+        data-outline-domain="${escapeHtml(domain.key)}"
+        data-outline-subject="${escapeHtml(subject)}"
+        data-outline-stage="${stage}"
+        aria-expanded="${open}"
+      >
+        <span class="outline-disclosure">›</span>
+        <span class="outline-branch-label">${escapeHtml(localizedDomain)}</span>
+        <span class="outline-count">${formatNumber(domain.count)}</span>
+      </button>
+      <div class="outline-children" ${open ? "" : "hidden"}>
+        ${domain.topics.map(outlineTopicMarkup).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function outlineTopicMarkup(node) {
+  const selected = state.selectedNode?.id === node.id;
+  return `
+    <div class="outline-topic">
+      <button
+        class="outline-topic-button ${selected ? "is-selected" : ""}"
+        type="button"
+        data-outline-topic-id="${escapeHtml(node.id)}"
+        ${selected ? 'aria-current="true"' : ""}
+      >${escapeHtml(node.label)}</button>
+      ${selected ? selectedTopicSummaryMarkup(node) : ""}
+    </div>
+  `;
+}
+
+function selectedTopicSummaryMarkup(node) {
+  const topic = node.localized;
+  const prerequisites = (state.incoming.get(node.id) || [])
+    .map((link) => ({ link, node: state.nodeById.get(link.source.id || link.source) }))
+    .filter((entry) => entry.node)
+    .sort(compareRelationEntries)
+    .slice(0, 4);
+  const next = rankNextSteps(node, state.outgoing.get(node.id) || [], state.nodeById);
+  const blocks = [
+    summaryCopyBlock(t("learningGoal"), topic.description || node.canonical.description),
+    summaryCopyBlock(t("masterySignal"), (topic.evidence || [])[0]),
+    summaryRelationBlock(t("prerequisites"), prerequisites),
+    summaryRelationBlock(t("recommendedNext"), next.recommended.slice(0, 4)),
+    summaryRelationBlock(t("furtherExtensions"), next.extensions.slice(0, 3)),
+  ].filter(Boolean);
+  const back = state.selectionHistory.length
+    ? `<button class="outline-back-button" type="button" data-outline-back>← ${escapeHtml(t("backToPrevious"))}</button>`
+    : "";
+  return `<div class="outline-topic-summary">${blocks.join("")}${back}</div>`;
+}
+
+function summaryCopyBlock(label, value) {
+  if (!value) return "";
+  return `
+    <div class="outline-summary-block">
+      <span class="outline-summary-label">${escapeHtml(label)}</span>
+      <p class="outline-summary-copy">${escapeHtml(value)}</p>
+    </div>
+  `;
+}
+
+function summaryRelationBlock(label, entries) {
+  if (!entries.length) return "";
+  return `
+    <div class="outline-summary-block">
+      <span class="outline-summary-label">${escapeHtml(label)}</span>
+      ${entries
+        .map(
+          (entry) => `<button class="outline-relation-button" type="button" data-outline-related-id="${escapeHtml(entry.node.id)}">${escapeHtml(entry.node.label)}</button>`,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function compareRelationEntries(left, right) {
+  if (left.link.strength !== right.link.strength) return left.link.strength === "hard" ? -1 : 1;
+  const leftSameDomain = left.node.canonicalDomain === state.selectedNode?.canonicalDomain ? 0 : 1;
+  const rightSameDomain = right.node.canonicalDomain === state.selectedNode?.canonicalDomain ? 0 : 1;
+  if (leftSameDomain !== rightSameDomain) return leftSameDomain - rightSameDomain;
+  return left.node.label.localeCompare(right.node.label, state.language);
+}
+
+function bindOutlineEvents() {
+  els.outlineTree.querySelectorAll("[data-outline-subject]").forEach((button) => {
+    if (button.hasAttribute("data-outline-domain")) return;
+    button.addEventListener("click", () => {
+      const key = `${button.dataset.outlineStage}|${button.dataset.outlineSubject}`;
+      toggleSetValue(state.expandedSubjects, key);
+      state.subject = button.dataset.outlineSubject;
+      state.domain = "all";
+      clearSelection({ renderOutline: false });
+      renderSubjectFilters();
+      renderOutline();
+      renderGraph();
+      updateStats();
+    });
+  });
+  els.outlineTree.querySelectorAll("[data-outline-domain]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = `${button.dataset.outlineStage}|${button.dataset.outlineSubject}|${button.dataset.outlineDomain}`;
+      toggleSetValue(state.expandedDomains, key);
+      state.subject = button.dataset.outlineSubject;
+      state.domain = button.dataset.outlineDomain;
+      clearSelection({ renderOutline: false });
+      renderSubjectFilters();
+      renderOutline();
+      renderGraph();
+      updateStats();
+    });
+  });
+  els.outlineTree.querySelectorAll("[data-outline-topic-id]").forEach((button) => {
+    button.addEventListener("click", () => selectNode(state.nodeById.get(button.dataset.outlineTopicId), { source: "outline" }));
+  });
+  els.outlineTree.querySelectorAll("[data-outline-related-id]").forEach((button) => {
+    button.addEventListener("click", () => selectNode(state.nodeById.get(button.dataset.outlineRelatedId), { source: "relation" }));
+  });
+  const backButton = els.outlineTree.querySelector("[data-outline-back]");
+  if (backButton) backButton.addEventListener("click", selectPreviousNode);
+}
+
+function toggleSetValue(set, value) {
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+}
+
+function visibleNodes() {
+  const focus = state.graphFocus || buildCurrentGraphFocus();
+  return state.nodes.filter((node) => focus.visibleIds.has(node.id));
+}
+
+function buildCurrentGraphFocus() {
+  state.graphFocus = buildGraphFocus(state.nodes, state.links, {
+    age: state.age,
+    subject: state.subject,
+    domain: state.domain,
+  });
+  return state.graphFocus;
 }
 
 function visibleGraphData() {
-  const nodes = visibleNodes();
-  const visibleIds = new Set(nodes.map((node) => node.id));
-  const links = state.links.filter((link) => visibleIds.has(link.source.id || link.source) && visibleIds.has(link.target.id || link.target));
-  return { nodes, links };
+  const focus = buildCurrentGraphFocus();
+  const nodes = state.nodes.filter((node) => focus.visibleIds.has(node.id));
+  return { nodes, links: focus.links };
 }
 
-function renderGraph() {
+function renderGraph(options = {}) {
   const graphData = visibleGraphData();
   if (!window.ForceGraph3D) {
     renderFallbackGraph(graphData);
@@ -318,10 +685,12 @@ function renderGraph() {
   els.graph.style.display = "block";
 
   if (!state.graph) {
-    state.graph = ForceGraph3D()(els.graph)
+    state.graph = window.ForceGraph3D()(els.graph)
       .backgroundColor("rgba(0,0,0,0)")
       .nodeId("id")
-      .nodeLabel((node) => `${escapeHtml(node.label)}<br>${escapeHtml(subjectLabel(node.canonicalSubject))} · ${escapeHtml(t("age"))} ${node.age}`)
+      .nodeLabel(
+        (node) => `${escapeHtml(node.label)}<br>${escapeHtml(subjectLabel(node.canonicalSubject))} · ${escapeHtml(t("age"))} ${node.age}<br>${escapeHtml(nodeFocusLabel(node))}`,
+      )
       .nodeVal((node) => node.val)
       .nodeRelSize(4.2)
       .nodeResolution(18)
@@ -334,7 +703,7 @@ function renderGraph() {
       .linkDirectionalParticleWidth(1.35)
       .linkDirectionalParticleSpeed(0.006)
       .onNodeHover(handleNodeHover)
-      .onNodeClick(selectNode)
+      .onNodeClick((node) => selectNode(node, { source: "graph" }))
       .onBackgroundClick(handleBackgroundClick)
       .enableNodeDrag(true)
       .cooldownTicks(140);
@@ -351,6 +720,7 @@ function renderGraph() {
   }
 
   state.graph.graphData(graphData);
+  if (options.fit === false) return;
   requestAnimationFrame(() => {
     if (state.graph) {
       state.graph.zoomToFit(920, 70);
@@ -384,9 +754,11 @@ function renderFallbackGraph(graphData) {
   const nodeIds = new Set(nodes.map((node) => node.id));
   ctx.strokeStyle = "rgba(180,201,255,0.12)";
   graphData.links.slice(0, 1100).forEach((link) => {
-    if (!nodeIds.has(link.source) || !nodeIds.has(link.target)) return;
-    const source = state.nodeById.get(link.source);
-    const target = state.nodeById.get(link.target);
+    const sourceId = link.source.id || link.source;
+    const targetId = link.target.id || link.target;
+    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) return;
+    const source = state.nodeById.get(sourceId);
+    const target = state.nodeById.get(targetId);
     if (!source || !target) return;
     ctx.beginPath();
     ctx.moveTo(source.fx2, source.fy2);
@@ -395,7 +767,7 @@ function renderFallbackGraph(graphData) {
   });
   nodes.forEach((node) => {
     ctx.beginPath();
-    ctx.fillStyle = SUBJECT_COLORS[node.canonicalSubject] || "#8be7ff";
+    ctx.fillStyle = nodeColor(node);
     ctx.shadowBlur = 12;
     ctx.shadowColor = ctx.fillStyle;
     ctx.arc(node.fx2, node.fy2, Math.max(2, node.val), 0, Math.PI * 2);
@@ -410,7 +782,19 @@ function nodeColor(node) {
   if (state.highlightedNodes.size && !state.highlightedNodes.has(node.id)) {
     return "rgba(115, 127, 148, 0.34)";
   }
+  if (state.graphFocus?.prerequisiteIds.has(node.id)) {
+    return "rgba(156, 174, 204, 0.48)";
+  }
+  if (state.graphFocus?.nextIds.has(node.id)) {
+    return "rgba(255, 209, 102, 0.58)";
+  }
   return SUBJECT_COLORS[node.canonicalSubject] || "#8be7ff";
+}
+
+function nodeFocusLabel(node) {
+  if (state.graphFocus?.prerequisiteIds.has(node.id)) return t("prerequisiteContext");
+  if (state.graphFocus?.nextIds.has(node.id)) return t("nextContext");
+  return t("focusLearning");
 }
 
 function linkColor(link) {
@@ -421,6 +805,14 @@ function linkColor(link) {
 }
 
 function selectNode(node, options = {}) {
+  if (!node) return;
+  const previousNode = state.selectedNode;
+  if (options.recordHistory !== false && previousNode && previousNode.id !== node.id) {
+    state.selectionHistory.push(previousNode.id);
+    state.selectionHistory = state.selectionHistory.slice(-30);
+  }
+
+  const navigationChanged = synchronizeSelectionContext(node);
   state.selectedNode = node;
   state.highlightedNodes = new Set([node.id]);
   state.highlightedLinks = new Set();
@@ -429,24 +821,62 @@ function selectNode(node, options = {}) {
     state.highlightedNodes.add(link.source.id || link.source);
     state.highlightedNodes.add(link.target.id || link.target);
   });
+
+  const stage = topicStageAtAge(node, state.age);
+  if (stage) {
+    state.expandedSubjects.add(`${stage}|${node.canonicalSubject}`);
+    state.expandedDomains.add(`${stage}|${node.canonicalSubject}|${node.canonicalDomain}`);
+  }
+  if (options.source === "graph") {
+    setOutlineOpen(true);
+  }
+  if (navigationChanged) {
+    renderAgeNavigator();
+    renderSubjectFilters();
+    renderGraph({ fit: false });
+    updateStats();
+  }
+  renderOutline();
   renderDetail(node);
   if (state.graph) {
     state.graph.nodeColor(nodeColor).linkColor(linkColor).linkWidth((link) => (state.highlightedLinks.has(link) ? 2.2 : link.strength === "hard" ? 0.7 : 0.35));
     if (options.focusCamera === false) {
       return;
     }
-    const distance = 78;
-    const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
-    state.graph.cameraPosition({ x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio }, node, 900);
+    if (Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z)) {
+      const distance = 78;
+      const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+      state.graph.cameraPosition({ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, node, 900);
+    }
   }
+}
+
+function synchronizeSelectionContext(node) {
+  let changed = false;
+  if (state.age < node.ageRangeStart || state.age > node.ageRangeEnd) {
+    state.age = node.ageRangeStart;
+    state.subject = "all";
+    state.domain = "all";
+    state.expandedSubjects.clear();
+    state.expandedDomains.clear();
+    changed = true;
+  }
+  if (state.subject !== "all" && state.subject !== node.canonicalSubject) {
+    state.subject = node.canonicalSubject;
+    state.domain = "all";
+    changed = true;
+  }
+  if (state.domain !== "all" && state.domain !== node.canonicalDomain) {
+    state.domain = node.canonicalDomain;
+    changed = true;
+  }
+  if (changed) state.graphFocus = null;
+  return changed;
 }
 
 function handleNodeHover(node) {
   state.hoveredNode = node || null;
   els.graph.style.cursor = node ? "pointer" : "grab";
-  if (node && (!state.selectedNode || state.selectedNode.id !== node.id)) {
-    selectNode(node, { focusCamera: false });
-  }
 }
 
 function handleBackgroundClick(event) {
@@ -454,15 +884,15 @@ function handleBackgroundClick(event) {
     return;
   }
   if (state.hoveredNode) {
-    selectNode(state.hoveredNode);
+    selectNode(state.hoveredNode, { source: "graph" });
     return;
   }
-  if (selectTooltipNode({ focusCamera: true })) {
+  if (selectTooltipNode({ focusCamera: true, source: "graph" })) {
     return;
   }
   const nearbyNode = nearestNodeFromPointerEvent(event);
   if (nearbyNode) {
-    selectNode(nearbyNode);
+    selectNode(nearbyNode, { source: "graph" });
     return;
   }
   clearSelection();
@@ -492,11 +922,11 @@ function handleGraphPointerUp(event) {
   if (drift > POINTER_CLICK_MAX_DRIFT) {
     return;
   }
-  if (selectTooltipNode({ focusCamera: true })) {
+  if (selectTooltipNode({ focusCamera: true, source: "graph" })) {
     event.stopPropagation();
     return;
   }
-  if (selectNearestNodeFromPointerEvent(event, { focusCamera: true })) {
+  if (selectNearestNodeFromPointerEvent(event, { focusCamera: true, source: "graph" })) {
     event.stopPropagation();
   }
 }
@@ -582,7 +1012,7 @@ function nearestNodeFromPointerEvent(event) {
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) {
       return;
     }
-    const projected = new THREE.Vector3(node.x, node.y, node.z).project(camera);
+    const projected = new window.THREE.Vector3(node.x, node.y, node.z).project(camera);
     const screenX = rect.left + ((projected.x + 1) / 2) * rect.width;
     const screenY = rect.top + ((1 - projected.y) / 2) * rect.height;
     const distance = Math.hypot(screenX - eventPoint.clientX, screenY - eventPoint.clientY);
@@ -594,12 +1024,39 @@ function nearestNodeFromPointerEvent(event) {
   return nearest;
 }
 
-function clearSelection() {
+function selectPreviousNode() {
+  const previousId = state.selectionHistory.pop();
+  const previousNode = previousId ? state.nodeById.get(previousId) : null;
+  if (previousNode) {
+    selectNode(previousNode, { recordHistory: false, source: "history" });
+  }
+}
+
+function scrollSelectedOutlineIntoView() {
+  if (!state.selectedNode) return;
+  requestAnimationFrame(() => {
+    const button = [...els.outlineTree.querySelectorAll("[data-outline-topic-id]")]
+      .find((candidate) => candidate.dataset.outlineTopicId === state.selectedNode?.id);
+    button?.scrollIntoView({ block: "nearest" });
+  });
+}
+
+function setOutlineOpen(open) {
+  state.outlineOpen = Boolean(open);
+  els.appShell.classList.toggle("is-outline-open", state.outlineOpen);
+  els.outlineToggle.setAttribute("aria-expanded", String(state.outlineOpen));
+  els.outlinePanel.toggleAttribute("inert", !state.outlineOpen);
+  requestAnimationFrame(resizeGraph);
+}
+
+function clearSelection(options = {}) {
   state.selectedNode = null;
   state.highlightedNodes.clear();
   state.highlightedLinks.clear();
+  if (options.clearHistory !== false) state.selectionHistory = [];
   els.topicDetail.hidden = true;
   els.emptyState.hidden = false;
+  if (options.renderOutline !== false) renderOutline();
   if (state.graph) {
     state.graph.nodeColor(nodeColor).linkColor(linkColor).linkWidth((link) => (link.strength === "hard" ? 0.7 : 0.35));
   }
@@ -619,7 +1076,9 @@ function renderDetail(node) {
   renderList(els.detailEvidence, topic.evidence || [], null);
   els.detailAssessment.textContent = topic.assessmentPrompt || "";
   renderRelationList(els.prerequisiteList, state.incoming.get(node.id) || [], "source");
-  renderRelationList(els.unlockList, state.outgoing.get(node.id) || [], "target");
+  const nextSteps = rankNextSteps(node, state.outgoing.get(node.id) || [], state.nodeById);
+  renderRelationEntries(els.unlockList, nextSteps.recommended);
+  renderRelationEntries(els.extensionList, nextSteps.extensions);
 }
 
 function renderList(container, items, clickRole) {
@@ -659,22 +1118,26 @@ function renderRelationList(container, links, endpoint) {
     reason.className = "relation-reason";
     reason.textContent = link.reason;
     li.appendChild(reason);
-    li.addEventListener("click", () => node && selectNode(node));
+    li.addEventListener("click", () => node && selectNode(node, { source: "relation" }));
     li.addEventListener("keydown", (event) => {
       if ((event.key === "Enter" || event.key === " ") && node) {
         event.preventDefault();
-        selectNode(node);
+        selectNode(node, { source: "relation" });
       }
     });
     container.appendChild(li);
   });
 }
 
+function renderRelationEntries(container, entries) {
+  renderRelationList(container, entries.map((entry) => entry.link), "target");
+}
+
 function updateStats() {
-  const visible = visibleNodes().length;
+  const focus = state.graphFocus || buildCurrentGraphFocus();
   els.topicCount.textContent = formatNumber(state.englishTopics.topicCount || state.nodes.length);
   els.edgeCount.textContent = formatNumber(state.englishDependencies.edgeCount || state.links.length);
-  els.visibleCount.textContent = formatNumber(visible);
+  els.visibleCount.textContent = formatNumber(focus.focusIds.size);
 }
 
 function showStatus(title, text) {
@@ -692,6 +1155,12 @@ function showError(error) {
   els.statusTitle.textContent = t("errorTitle");
   els.statusText.textContent = t("errorText");
   els.statusLayer.classList.remove("is-hidden");
+}
+
+function handleLanguageLoadError(error, loadVersion) {
+  if (loadVersion === state.languageLoadVersion) {
+    showError(error);
+  }
 }
 
 function resizeGraph() {
@@ -713,14 +1182,22 @@ function escapeHtml(value) {
 }
 
 els.languageSelect.addEventListener("change", async (event) => {
+  clearSelection({ renderOutline: false });
+  const loadPromise = loadLanguage(event.target.value);
+  const loadVersion = state.languageLoadVersion;
   try {
-    clearSelection();
-    await loadLanguage(event.target.value);
+    await loadPromise;
   } catch (error) {
-    showError(error);
+    handleLanguageLoadError(error, loadVersion);
   }
 });
 
 els.closeDetail.addEventListener("click", clearSelection);
+els.outlineToggle.addEventListener("click", () => setOutlineOpen(!state.outlineOpen));
+els.outlineClose.addEventListener("click", () => setOutlineOpen(false));
+els.appShell.addEventListener("transitionend", resizeGraph);
 
-loadLanguage("en").catch(showError);
+setOutlineOpen(state.outlineOpen);
+const initialLanguageLoad = loadLanguage("en");
+const initialLanguageLoadVersion = state.languageLoadVersion;
+initialLanguageLoad.catch((error) => handleLanguageLoadError(error, initialLanguageLoadVersion));
